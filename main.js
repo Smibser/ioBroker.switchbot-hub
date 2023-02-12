@@ -593,7 +593,7 @@ class SwitchbotHub extends utils.Adapter {
 					// 	// 	power state : ${},
 					// 	// }`
 					// }
-					if (remoteType == 'TV') {
+					if (remoteType == 'TV' || remoteType == 'Others') {
 						apiData.commandType = 'customize';
 						apiData.parameter = 'default';
 						apiData.command = deviceArray[3];
