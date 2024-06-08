@@ -10,6 +10,8 @@ const utils = require('@iobroker/adapter-core');
 const stateAttr = require(`${__dirname}/lib/state_attr.js`); // Load attribute library
 const irDeviceButtons = require(`${__dirname}/lib/irRemoteDevices.js`); // Load irRemote Button definitions
 const { default: axios } = require('axios');
+const crypto = require('crypto');
+const https = require('https');
 
 const disableSentry = false; // Ensure to set to true during development !
 
@@ -172,10 +174,29 @@ class SwitchbotHub extends utils.Adapter {
 	 * Make API call to SwitchBot API and return response.
 	 * See documentation at https://github.com/OpenWonderLabs/SwitchBotAPI
 	 *
-	 * @param {string} [url] - Endpoint to handle API call, like `/v1.0/devices`
+	 * @param {string} [url] - Endpoint to handle API call, like `/v1.1/devices`
 	 * @param {object} [data] - Data for api post calls, if empty get will be executed
 	 */
 	apiCall(url, data) {
+		const token = "32d114ad99b5516e32481c143a13a2571351d80766e289da0944b5fb3ffc55623db4975e914b7ee796c6f39bcb562dee";
+		const secret = this.config.openToken;
+		const t = Date.now();
+		const nonce = "requestID";
+
+		const tokenData = token + t + nonce;
+		const signTerm = crypto.createHmac('sha256', secret)
+			.update(Buffer.from(tokenData, 'utf-8'))
+			.digest();
+		const sign = signTerm.toString("base64");
+
+		const headers =  {
+			"Authorization": token,
+			"sign": sign,
+			"nonce": nonce,
+			"t": t,
+			'Content-Type': 'application/json',
+			'Content-Length': data.length,
+		}
 
 		if (!url) throw new Error(`No URL provided, cannot make API call`);
 		if (!data) {
@@ -183,7 +204,7 @@ class SwitchbotHub extends utils.Adapter {
 				baseURL: 'https://api.switch-bot.com',
 				url: url,
 				timeout: 1000,
-				headers: { 'Authorization': this.config.openToken }
+				headers: headers
 			})
 				.then(response => response.data)
 				.catch(error => {
@@ -195,10 +216,7 @@ class SwitchbotHub extends utils.Adapter {
 				baseURL: 'https://api.switch-bot.com',
 				url: url,
 				timeout: 1000,
-				headers: {
-					'Content-Type': 'application/json;charset=UTF-8',
-					'Authorization': this.config.openToken,
-				}
+				headers: headers
 			})
 				.then(response => response.data)
 				.catch(error => {
@@ -212,7 +230,7 @@ class SwitchbotHub extends utils.Adapter {
 		try {
 
 			// Call API and get all devices
-			const apiResponse = await this.apiCall(`/v1.0/devices`);
+			const apiResponse = await this.apiCall(`/v1.1/devices`);
 			this.log.debug(`[getDevices API response]: ${JSON.stringify(apiResponse)}`);
 			if (!apiResponse) {
 				this.log.error(`Empty device list received, cannot process`);
@@ -316,7 +334,7 @@ class SwitchbotHub extends utils.Adapter {
 	async deviceStatus(deviceId) {
 		try {
 
-			const apiResponse = await this.apiCall(`/v1.0/devices/${deviceId}/status`);
+			const apiResponse = await this.apiCall(`/v1.1/devices/${deviceId}/status`);
 			const devicesValues = apiResponse.body;
 			this.log.debug(`[deviceStatus apiResponse ]: ${JSON.stringify(apiResponse)}`);
 			if (!devicesValues || Object.keys(devicesValues).length === 0) {
@@ -515,7 +533,7 @@ class SwitchbotHub extends utils.Adapter {
 				const remoteType = this.devices[deviceArray[2]].remoteType;
 
 				// Default configuration for SmartBot POST api
-				const apiURL = `/v1.0/devices/${deviceId}/commands`;
+				const apiURL = `/v1.1/devices/${deviceId}/commands`;
 				const apiData = {
 					'command': 'setAll',
 					'parameter': state.val,
@@ -631,20 +649,22 @@ class SwitchbotHub extends utils.Adapter {
 		let sentryMessage = msg; // If no (stack) error is provided just send the message
 		if (error) sentryMessage = `${msg} | Error : ${error} | StackTrace : ${error.stack}}`;
 
+		console.error(`[Error caught and NOT sent to Sentry]  ${sentryMessage}`);
 
-		if (!disableSentry) {
-			if (this.supportsFeature && this.supportsFeature('PLUGINS')) {
-				const sentryInstance = this.getPluginInstance('sentry');
-				if (sentryInstance) {
-					this.log.info(`[Error caught and sent to Sentry, thank you for collaborating!]  ${sentryMessage}`);
-					sentryInstance.getSentryObject().captureException(sentryMessage);
-				} else {
-					this.log.error(`Sentry disabled, error caught : ${sentryMessage}`);
-				}
-			}
-		} else {
-			this.log.error(`Sentry disabled, error caught : ${sentryMessage}`);
-		}
+
+		// if (!disableSentry) {
+		// 	if (this.supportsFeature && this.supportsFeature('PLUGINS')) {
+		// 		const sentryInstance = this.getPluginInstance('sentry');
+		// 		if (sentryInstance) {
+		// 			this.log.info(`[Error caught and sent to Sentry, thank you for collaborating!]  ${sentryMessage}`);
+		// 			sentryInstance.getSentryObject().captureException(sentryMessage);
+		// 		} else {
+		// 			this.log.error(`Sentry disabled, error caught : ${sentryMessage}`);
+		// 		}
+		// 	}
+		// } else {
+		// 	this.log.error(`Sentry disabled, error caught : ${sentryMessage}`);
+		// }
 	}
 
 }
