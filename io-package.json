@@ -1,6 +1,6 @@
 {
     "common": {
-        "name": "switchbot-hub-korbi",
+        "name": "switchbot-hub",
         "version": "0.1.4",
         "news": {
             "0.1.2": {
